@@ -56,3 +56,49 @@ export const removeMarkdownFormatting = (text: string): string => {
 
   return fixed;
 };
+
+export const formatDate = (localDate: Date) => {
+  let date: any = localDate.getDate();
+  let month: any = localDate.getMonth() + 1;
+  if (date < 10) {
+    date = `0${date}`;
+  }
+
+  if (month < 10) {
+    month = `0${month}`;
+  }
+  return `${localDate.getFullYear()}-${month}-${date}`;
+};
+
+export const getFromDateAndToDate = (dateRange: string) => {
+  let fromDate = '';
+  let toDate = '';
+
+  switch (dateRange) {
+    case 'Select':
+      fromDate = '';
+      toDate = '';
+      break;
+
+    case '7-days':
+      toDate = formatDate(new Date());
+      fromDate = formatDate(
+        new Date(new Date().setDate(new Date().getDate() - 6)),
+      );
+      break;
+
+    case '30-days':
+      toDate = formatDate(new Date());
+      fromDate = formatDate(
+        new Date(new Date().setDate(new Date().getDate() - 29)),
+      );
+      break;
+
+    default:
+      fromDate = dateRange.split('--')[0];
+      toDate = dateRange.split('--')[1];
+      break;
+  }
+
+  return { fromDate, toDate };
+};

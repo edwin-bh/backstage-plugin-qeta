@@ -18,6 +18,7 @@ import { AskQuestionButton } from '../Buttons/AskQuestionButton';
 import { EntityRefLink } from '@backstage/plugin-catalog-react';
 import { useAnalytics } from '@backstage/core-plugin-api';
 import { filterTags } from '@drodil/backstage-plugin-qeta-common';
+import { formatDate, getFromDateAndToDate } from '../../utils/utils';
 
 export interface QuestionsContainerProps {
   tags?: string[];
@@ -29,6 +30,7 @@ export interface QuestionsContainerProps {
   favorite?: boolean;
   showAskButton?: boolean;
   showNoQuestionsBtn?: boolean;
+  dateRange?: string;
 }
 
 export const QuestionsContainer = (props: QuestionsContainerProps) => {
@@ -42,6 +44,7 @@ export const QuestionsContainer = (props: QuestionsContainerProps) => {
     favorite,
     showAskButton,
     showNoQuestionsBtn,
+    dateRange,
   } = props;
   const analytics = useAnalytics();
   const [page, setPage] = React.useState(1);
@@ -58,6 +61,7 @@ export const QuestionsContainer = (props: QuestionsContainerProps) => {
     searchQuery: '',
     entity: entity ?? '',
     tags: tags ?? [],
+    dateRange: dateRange ?? 'Select',
   });
 
   const onPageChange = (value: number) => {
@@ -151,13 +155,18 @@ export const QuestionsContainer = (props: QuestionsContainerProps) => {
     error,
   } = useQetaApi(
     api => {
+      const dates = getFromDateAndToDate(filters.dateRange || 'Select');
+      const filtersForAPI = { ...filters, ...dates };
+
+      delete filtersForAPI.dateRange;
+
       return api.getQuestions({
         limit: questionsPerPage,
         offset: (page - 1) * questionsPerPage,
         includeEntities: true,
         author,
         favorite,
-        ...filters,
+        ...filtersForAPI,
       });
     },
     [page, filters, questionsPerPage],
@@ -252,7 +261,11 @@ export const QuestionsContainer = (props: QuestionsContainerProps) => {
       </Grid>
       {(showFilters ?? true) && (
         <Collapse in={showFilterPanel}>
-          <FilterPanel onChange={onFilterChange} filters={filters} />
+          <FilterPanel
+            onChange={onFilterChange}
+            filters={filters}
+            showEntityFilter={!entity}
+          />
         </Collapse>
       )}
 

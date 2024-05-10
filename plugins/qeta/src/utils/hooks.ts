@@ -257,6 +257,11 @@ export const useStyles = makeStyles(theme => {
         boxShadow: 'none',
       },
     },
+    dateFilter: {
+      marginTop: theme.spacing(2),
+      margin: theme.spacing(1),
+      minWidth: 200,
+    },
   };
 });
 

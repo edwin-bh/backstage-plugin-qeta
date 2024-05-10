@@ -1,12 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Checkbox,
+  Divider,
   FormControl,
   FormControlLabel,
   FormGroup,
   FormLabel,
   Grid,
+  MenuItem,
   Radio,
   RadioGroup,
   TextField,
@@ -16,7 +18,7 @@ import { Autocomplete } from '@material-ui/lab';
 import { Entity, stringifyEntityRef } from '@backstage/catalog-model';
 import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
-import { getEntityTitle } from '../../utils/utils';
+import { formatDate, getEntityTitle } from '../../utils/utils';
 
 const radioSelect = (value: string, label: string) => {
   return (
@@ -36,6 +38,7 @@ export const filterKeys = [
   'noVotes',
   'entity',
   'tags',
+  'dateRange',
 ] as const;
 export type FilterKey = (typeof filterKeys)[number];
 
@@ -48,6 +51,9 @@ export type Filters = {
   searchQuery: string;
   entity: string;
   tags: string[];
+  dateRange?: string | 'Select';
+  // fromDate?: string | '';
+  // toDate?: string;
 };
 
 export interface FilterPanelProps {
@@ -78,6 +84,16 @@ export const FilterPanel = (props: FilterPanelProps) => {
     null,
   );
 
+  const [showDateRange, setShowDateRange] = useState(false);
+  const [dateRange, setDateRange] = useState('Select');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [fromDateHasError, setFromDateHasError] = useState(true);
+  const [toDateHasError, setToDateHasError] = useState(true);
+  const [fromDateHelperText, setFromDateHelperText] =
+    useState('Select From Date');
+  const [toDateHelperText, setToDateHelperText] = useState('Select To Date');
+
   useEffect(() => {
     if ((tags && tags.length > 0) || filters.tags) {
       const ts = (tags ?? []).map(t => t.tag);
@@ -89,22 +105,13 @@ export const FilterPanel = (props: FilterPanelProps) => {
   }, [tags, filters.tags]);
 
   useEffect(() => {
-    const entityRefs: string[] = [];
-    if (filters.entity && !Array.isArray(filters.entity)) {
-      entityRefs.push(filters.entity);
-    }
-    if (refs && refs?.length > 0) {
-      refs?.forEach(ref => {
-        // ignore currently selected entity if exist in refs
-        if (ref.entityRef !== filters.entity) {
-          entityRefs.push(ref.entityRef);
-        }
-      });
-    }
-    if (entityRefs.length > 0) {
+    if (
+      (filters.entity || (refs && refs?.length > 0)) &&
+      !Array.isArray(filters.entity)
+    ) {
       catalogApi
         .getEntitiesByRefs({
-          entityRefs,
+          entityRefs: [...(refs ?? []).map(e => e.entityRef), filters.entity],
           fields: [
             'kind',
             'metadata.name',
@@ -133,20 +140,87 @@ export const FilterPanel = (props: FilterPanelProps) => {
     }
   }, [availableEntities, filters.entity, onChange]);
 
-  const handleChange = (event: {
-    target: {
-      value: string | string[];
-      type?: string;
-      name: string;
-      checked?: boolean;
-    };
-  }) => {
-    let value = event.target.value;
-    if (event.target.type === 'checkbox') {
-      value = event.target.checked ? 'true' : 'false';
+  useEffect(() => {
+    const dateRangeForFilters = filters.dateRange || 'Select';
+    setDateRange(dateRangeForFilters);
+    if (!['7-days', '30-days', 'Select'].includes(dateRangeForFilters)) {
+      setShowDateRange(true);
+      setDateRange('customDate');
+
+      setFromDate(dateRangeForFilters.split('--')[0] || '');
+      setToDate(dateRangeForFilters.split('--')[1] || '');
+      setFromDateHasError(false);
+      setToDateHasError(false);
+      setFromDateHelperText('');
+      setToDateHelperText('');
     }
-    onChange(event.target.name as FilterKey, value);
-  };
+  }, [filters.dateRange]);
+
+  const handleChange = useCallback(
+    (event: {
+      target: {
+        value: string | string[];
+        type?: string;
+        name: string;
+        checked?: boolean;
+      };
+    }) => {
+      let value = event.target.value;
+      if (event.target.type === 'checkbox') {
+        value = event.target.checked ? 'true' : 'false';
+      }
+      onChange(event.target.name as FilterKey, value);
+    },
+    [onChange],
+  );
+
+  useEffect(() => {
+    if (fromDate && toDate) {
+      setToDateHasError(true);
+      setToDateHelperText('Select To Date');
+      const startDate = new Date(fromDate || '');
+      const endDate = new Date(toDate || '');
+      if (startDate <= endDate) {
+        setToDateHasError(false);
+        setToDateHelperText('');
+
+        handleChange({
+          target: {
+            name: 'dateRange',
+            value: `${fromDate}--${toDate}`,
+          },
+        });
+      } else {
+        setToDateHasError(true);
+        setToDateHelperText('To Date should be greater than the From Date');
+      }
+    }
+  }, [fromDate, toDate, handleChange]);
+
+  // const validateDate = (value: string) => {
+  //   setToDateHasError(true);
+  //   setToDateHelperText('Select To Date');
+  //   if (value) {
+  //     const startDate = new Date(filters.fromDate || '');
+  //     const endDate = new Date(value || '');
+  //     if (startDate <= endDate) {
+  //       setToDateHasError(false);
+  //       setToDateHelperText('');
+
+  //       handleChange({
+  //         target: {
+  //           name: 'dateRange',
+  //           value: `${filters.fromDate}--${value}`,
+  //         },
+  //       });
+  //     } else {
+  //       setToDateHasError(true);
+  //       setToDateHelperText('To Date should be greater than the From Date');
+  //     }
+  //   }
+  // };
+
+  const localDate = formatDate(new Date());
 
   return (
     <Box className={`qetaFilterPanel ${styles.filterPanel}`}>
@@ -225,7 +299,8 @@ export const FilterPanel = (props: FilterPanelProps) => {
               <FormLabel id="qeta-filter-entity">Filters</FormLabel>
               {showEntityFilter &&
                 availableEntities &&
-                availableEntities.length > 0 && (
+                availableEntities.length > 0 &&
+                (!filters.entity || selectedEntity) && (
                   <Autocomplete
                     multiple={false}
                     className="qetaEntityFilter"
@@ -287,6 +362,97 @@ export const FilterPanel = (props: FilterPanelProps) => {
             </Grid>
           )}
       </Grid>
+      <Divider />
+      <TextField
+        id="outlined-select-currency"
+        select
+        label="Date Range"
+        className={styles.dateFilter}
+        value={dateRange}
+        onChange={_e => {
+          setDateRange(_e.target.value);
+          setShowDateRange(false);
+          if (_e.target.value === 'customDate') {
+            setFromDate('');
+            setToDate('');
+            setFromDateHasError(true);
+            setFromDateHelperText('Select From Date');
+            setToDateHasError(true);
+            setToDateHelperText('Select To Date');
+
+            setShowDateRange(true);
+          } else {
+            handleChange({
+              target: {
+                name: 'dateRange',
+                value: _e.target.value,
+              },
+            });
+          }
+        }}
+        variant="outlined"
+        size="small"
+        defaultValue="None"
+      >
+        <MenuItem aria-label="Select" value="Select">
+          Select
+        </MenuItem>
+        <MenuItem value="7-days">Last 7 Days</MenuItem>
+        <MenuItem value="30-days">Last 30 Days</MenuItem>
+        <MenuItem value="customDate">Custom Date</MenuItem>
+      </TextField>
+      {showDateRange && (
+        <>
+          <TextField
+            variant="outlined"
+            label="From Date"
+            id="From-date"
+            type="date"
+            value={fromDate}
+            className={styles.dateFilter}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            error={fromDateHasError}
+            helperText={fromDateHelperText}
+            onChange={_e => {
+              setFromDate(_e.target.value);
+              // filters.fromDate = _e.target.value;
+              setFromDateHasError(true);
+              setFromDateHelperText('Select From Date');
+              if (_e.target.value) {
+                setFromDateHasError(false);
+                setFromDateHelperText('');
+                // if (toDate) {
+                //   validateDate(toDate);
+                // }
+              }
+            }}
+            inputProps={{
+              max: localDate,
+            }}
+          />
+          <TextField
+            variant="outlined"
+            label="To Date"
+            id="to-date"
+            type="date"
+            value={toDate}
+            className={styles.dateFilter}
+            size="small"
+            InputLabelProps={{ shrink: true }}
+            error={toDateHasError}
+            helperText={toDateHelperText}
+            onChange={_e => {
+              setToDate(_e.target.value);
+              // validateDate(_e.target.value);
+            }}
+            inputProps={{
+              min: fromDate || localDate,
+              max: localDate,
+            }}
+          />
+        </>
+      )}
     </Box>
   );
 };
